@@ -12,9 +12,13 @@
 
 ## Group Members
 **MANDATORY: Add the full names of all group members here:**
-- [Member 1 Full Name]
-- [Member 2 Full Name]
+- Rotem Mizrachi
+- Romi Cohen
 
 ## Technical Details
 - Run the server with: `node index.js`
 - Access at http://localhost:8000 in your web browser
+
+Images:
+![image](https://github.com/user-attachments/assets/7ac87a3d-7f56-43e7-bc9f-0aeafb3d4c1c)
+
