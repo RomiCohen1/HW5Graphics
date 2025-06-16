@@ -280,7 +280,7 @@ function createHoopSystem(xPos, flip = false) {
   group.add(pole);
 
   // Support Arm 
-  const armLength = 0.4; 
+  const armLength = 0.38; 
   const armGeometry = new THREE.CylinderGeometry(0.05, 0.05, armLength, 16);
   const armMaterial = new THREE.MeshPhongMaterial({ color: 0x999999 });
   const arm = new THREE.Mesh(armGeometry, armMaterial);
