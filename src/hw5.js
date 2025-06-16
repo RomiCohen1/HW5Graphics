@@ -279,14 +279,20 @@ function createHoopSystem(xPos, flip = false) {
   pole.position.set(0.6, 1.525, 0);
   group.add(pole);
 
-  // Support Arm (box)
-  const armGeometry = new THREE.BoxGeometry(0.1, 0.1, 0.5);
+  // Support Arm 
+  const armLength = 0.4; 
+  const armGeometry = new THREE.CylinderGeometry(0.05, 0.05, armLength, 16);
   const armMaterial = new THREE.MeshPhongMaterial({ color: 0x999999 });
   const arm = new THREE.Mesh(armGeometry, armMaterial);
-  arm.position.set(0.475, 3.15, -0.21);  // placed behind backboard
-  arm.rotation.x= degrees_to_radians(30); // slight diagonal
-  arm.rotation.y= degrees_to_radians(30); // slight diagonal
+  const poleX = 0.6;
+  const backboardX = 0.28;
+  const midpointX = (poleX + backboardX) / 2; 
+
+  arm.position.set(midpointX, 3.2, 0); 
+  arm.rotation.z = THREE.MathUtils.degToRad(60);
+
   group.add(arm);
+
 
   if (flip) {
     group.rotation.y = Math.PI;
