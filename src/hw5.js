@@ -169,56 +169,381 @@ createThreePointArc(1);  // One side
 createThreePointArc(-1); // Other side
 
 
+// Basketball Game State Variables
+let basketball;
+let basketballGroup;
+let ballRadius = 0.24;
+let ballVelocity = new THREE.Vector3(0, 0, 0);
+let ballRotation = new THREE.Vector3(0, 0, 0);
+let isInFlight = false;
+let shotPower = 50; // 0-100%
+let gravity = -9.8;
+let bounceCoefficient = 0.6;
+let gameStats = {
+  homeScore: 0,
+  awayScore: 0,
+  shotAttempts: 0,
+  shotsMade: 0,
+  accuracy: 0
+};
+
+// Track ball position for pass-through detection
+let previousBallPosition = new THREE.Vector3(0, 0, 0);
+let ballAboveHoop = false;
+
 // Create basketball at center court
 function createBasketball() {
-  // Basketball sphere 
-  const ballRadius = 0.24;
+  basketballGroup = new THREE.Group();
+  
+  // Basketball sphere
   const ballGeometry = new THREE.SphereGeometry(ballRadius, 32, 16);
   
   // Orange basketball material
-  const ballMaterial = new THREE.MeshPhongMaterial({ 
-    color: 0xff6600, 
+  const ballMaterial = new THREE.MeshPhongMaterial({
+    color: 0xff6600,
     shininess: 30
   });
   
-  const basketball = new THREE.Mesh(ballGeometry, ballMaterial);
-  basketball.position.set(0, ballRadius + 0.2, 0); 
+  basketball = new THREE.Mesh(ballGeometry, ballMaterial);
   basketball.castShadow = true;
-  scene.add(basketball);
+  basketballGroup.add(basketball);
   
 
-   // Create simple basketball seams 
-  const seamMaterial = new THREE.MeshBasicMaterial({ 
-    color: 0x000000 
+   // Create simple basketball seams
+  const seamMaterial = new THREE.MeshBasicMaterial({
+    color: 0x000000
   });
   
   // Vertical seam line (going around the ball vertically)
   const verticalSeamGeometry = new THREE.TorusGeometry(ballRadius + 0.001, 0.004, 8, 16);
   const verticalSeam = new THREE.Mesh(verticalSeamGeometry, seamMaterial);
-  verticalSeam.position.set(0, ballRadius + 0.2, 0);
-  verticalSeam.rotation.x = Math.PI / 2; 
-  scene.add(verticalSeam);
+  verticalSeam.rotation.x = Math.PI / 2;
+  basketballGroup.add(verticalSeam);
 
   // Four continuous curved seams that go all the way around
-  const curvedSeamGeometry = new THREE.TorusGeometry(ballRadius + 0.001, 0.004, 8, 16); 
+  const curvedSeamGeometry = new THREE.TorusGeometry(ballRadius + 0.001, 0.004, 8, 16);
   
   // First curved seam
   const curvedSeam1 = new THREE.Mesh(curvedSeamGeometry, seamMaterial);
-  curvedSeam1.position.set(0, ballRadius + 0.2, 0);
   curvedSeam1.rotation.x = Math.PI / 2;
   curvedSeam1.rotation.y = Math.PI / 4;
-  scene.add(curvedSeam1);
+  basketballGroup.add(curvedSeam1);
   
   // Second curved seam (perpendicular to first)
   const curvedSeam2 = new THREE.Mesh(curvedSeamGeometry, seamMaterial);
-  curvedSeam2.position.set(0, ballRadius + 0.2, 0);
   curvedSeam2.rotation.x = Math.PI / 2;
   curvedSeam2.rotation.y = -Math.PI / 4;
-  scene.add(curvedSeam2);
+  basketballGroup.add(curvedSeam2);
+  
+  // Position the basketball group at center court
+  basketballGroup.position.set(0, ballRadius + 0.2, 0);
+  scene.add(basketballGroup);
 }
 
 // Create the basketball
 createBasketball();
+
+// Basketball Physics Functions
+function updateBasketballPhysics(deltaTime) {
+  if (!isInFlight) return;
+  
+  // Apply gravity
+  ballVelocity.y += gravity * deltaTime;
+  
+  // Update position
+  basketballGroup.position.add(ballVelocity.clone().multiplyScalar(deltaTime));
+  
+  // Apply rotation based on velocity
+  const speed = ballVelocity.length();
+  ballRotation.x += speed * deltaTime * 5; // Increased from 2 to 5
+  ballRotation.z += ballVelocity.x * deltaTime * 5; // Increased from 2 to 5
+  
+  // Apply rotation to both basketball mesh and group
+  basketball.rotation.x = ballRotation.x;
+  basketball.rotation.z = ballRotation.z;
+  basketballGroup.rotation.x = ballRotation.x;
+  basketballGroup.rotation.z = ballRotation.z;
+  
+  // Ground collision detection
+  if (basketballGroup.position.y <= ballRadius + 0.2) {
+    basketballGroup.position.y = ballRadius + 0.2;
+    ballVelocity.y = -ballVelocity.y * bounceCoefficient;
+    ballVelocity.x *= 0.8; // Friction
+    ballVelocity.z *= 0.8; // Friction
+    
+    // Stop bouncing if velocity is too low
+    if (Math.abs(ballVelocity.y) < 0.5 && speed < 1) {
+      isInFlight = false;
+      ballVelocity.set(0, 0, 0);
+    }
+  }
+  
+  // Check for score
+  checkForScore();
+}
+
+function checkForScore() {
+  const ballPos = basketballGroup.position;
+  const hoopHeight = 3.05;
+  const hoopRadius = 0.23;
+  const hoopDetectionHeight = 0.4; // Height range for detection
+  
+  // Check both hoops with team assignment
+  const hoops = [
+    { x: 14.5 + 0.1, z: 0, team: 'home' },   // Right hoop scores for HOME
+    { x: -14.5 - 0.1, z: 0, team: 'away' }  // Left hoop scores for AWAY
+  ];
+  
+  hoops.forEach(hoop => {
+    const distanceToHoop = Math.sqrt(
+      Math.pow(ballPos.x - hoop.x, 2) +
+      Math.pow(ballPos.z - hoop.z, 2)
+    );
+    
+    const prevDistanceToHoop = Math.sqrt(
+      Math.pow(previousBallPosition.x - hoop.x, 2) +
+      Math.pow(previousBallPosition.z - hoop.z, 2)
+    );
+    
+    // Check if ball is within hoop radius horizontally
+    const withinHoopRadius = distanceToHoop <= hoopRadius;
+    const prevWithinHoopRadius = prevDistanceToHoop <= hoopRadius;
+    
+    // Check if ball is above hoop (approaching from above)
+    const aboveHoop = ballPos.y > hoopHeight && ballPos.y < hoopHeight + hoopDetectionHeight;
+    const belowHoop = ballPos.y < hoopHeight && ballPos.y > hoopHeight - hoopDetectionHeight;
+    
+    // Check if ball was above hoop in previous frame
+    const wasAboveHoop = previousBallPosition.y > hoopHeight;
+    
+    // Ball must pass through hoop: was above, now below, and within radius, moving downward
+    if (withinHoopRadius &&
+        wasAboveHoop &&
+        belowHoop &&
+        ballVelocity.y < 0 && // Ball must be moving downward
+        isInFlight) { // Only count during flight, not manual movement
+      
+      console.log(`SCORE DETECTED! Ball passed through ${hoop.team} hoop!`);
+      
+      // Score for the appropriate team!
+      gameStats.shotsMade++;
+      if (hoop.team === 'home') {
+        gameStats.homeScore += 2;
+        // Show "SHOT MADE!" first, then team-specific message
+        showShotFeedback(true, 'SHOT MADE!');
+        setTimeout(() => {
+          showShotFeedback(true, 'HOME SCORES!');
+        }, 1000);
+      } else {
+        gameStats.awayScore += 2;
+        // Show "SHOT MADE!" first, then team-specific message
+        showShotFeedback(true, 'SHOT MADE!');
+        setTimeout(() => {
+          showShotFeedback(true, 'AWAY SCORES!');
+        }, 1000);
+      }
+      
+      updateGameUI();
+      
+      // Stop the ball
+      isInFlight = false;
+      ballVelocity.set(0, 0, 0);
+    }
+  });
+  
+  // Update previous position for next frame
+  previousBallPosition.copy(ballPos);
+}
+
+function shootBasketball() {
+  if (isInFlight) return; // Can't shoot while ball is in flight
+  
+  gameStats.shotAttempts++;
+  
+  // Find nearest hoop
+  const ballPos = basketballGroup.position;
+  const hoops = [
+    { x: 14.5 + 0.1, z: 0 }, // Right hoop
+    { x: -14.5 - 0.1, z: 0 } // Left hoop
+  ];
+  
+  let nearestHoop = hoops[0];
+  let minDistance = Math.sqrt(
+    Math.pow(ballPos.x - hoops[0].x, 2) +
+    Math.pow(ballPos.z - hoops[0].z, 2)
+  );
+  
+  const distance1 = Math.sqrt(
+    Math.pow(ballPos.x - hoops[1].x, 2) +
+    Math.pow(ballPos.z - hoops[1].z, 2)
+  );
+  
+  if (distance1 < minDistance) {
+    nearestHoop = hoops[1];
+    minDistance = distance1;
+  }
+  
+  // Calculate shot trajectory
+  const targetHeight = 3.05; // Hoop height
+  const currentHeight = basketballGroup.position.y;
+  const distance = minDistance;
+  
+  // Calculate initial velocity based on shot power
+  const powerMultiplier = shotPower / 100;
+  const baseVelocity = 15; // Base shooting velocity
+  const initialVelocity = baseVelocity * powerMultiplier;
+  
+  // Calculate trajectory angle for proper arc
+  const angle = Math.atan2(targetHeight - currentHeight + 2, distance); // +2 for arc
+  
+  // Set velocity components
+  const direction = new THREE.Vector3(
+    nearestHoop.x - ballPos.x,
+    0,
+    nearestHoop.z - ballPos.z
+  ).normalize();
+  
+  ballVelocity.x = direction.x * initialVelocity * Math.cos(angle);
+  ballVelocity.z = direction.z * initialVelocity * Math.cos(angle);
+  ballVelocity.y = initialVelocity * Math.sin(angle);
+  
+  isInFlight = true;
+  
+  // Add slight delay before checking if shot missed
+  setTimeout(() => {
+    if (isInFlight && basketballGroup.position.y < 1) {
+      showShotFeedback(false);
+    }
+  }, 2000);
+  
+  updateGameUI();
+}
+
+function resetBasketball() {
+  basketballGroup.position.set(0, ballRadius + 0.2, 0);
+  ballVelocity.set(0, 0, 0);
+  ballRotation.set(0, 0, 0);
+  basketball.rotation.set(0, 0, 0);
+  basketballGroup.rotation.set(0, 0, 0); // Also reset group rotation
+  previousBallPosition.set(0, ballRadius + 0.2, 0); // Reset previous position tracking
+  ballAboveHoop = false;
+  isInFlight = false;
+  shotPower = 50;
+  updateGameUI();
+}
+
+
+function moveBasketball(direction, speed = 5) {
+  if (isInFlight) return; // Can't move while ball is in flight
+  
+  const moveSpeed = speed * 0.016; // Assuming 60 FPS
+  const newPosition = basketballGroup.position.clone();
+  
+  switch(direction) {
+    case 'left':
+      newPosition.x -= moveSpeed;
+      break;
+    case 'right':
+      newPosition.x += moveSpeed;
+      break;
+    case 'forward':
+      newPosition.z -= moveSpeed;
+      break;
+    case 'backward':
+      newPosition.z += moveSpeed;
+      break;
+  }
+  
+  // Keep ball within court boundaries
+  newPosition.x = Math.max(-14, Math.min(14, newPosition.x));
+  newPosition.z = Math.max(-7, Math.min(7, newPosition.z));
+  
+  basketballGroup.position.copy(newPosition);
+  
+  // Add rotation during movement - PROPORTIONAL TO VELOCITY
+  if (!isInFlight) {
+    // Calculate rotation based on movement speed (velocity-proportional)
+    const rotationMultiplier = 15; // How much rotation per unit of movement
+    const rotationAmount = moveSpeed * rotationMultiplier;
+    
+    if (direction === 'left' || direction === 'right') {
+      ballRotation.z += (direction === 'left' ? rotationAmount : -rotationAmount);
+    } else {
+      ballRotation.x += (direction === 'forward' ? rotationAmount : -rotationAmount);
+    }
+    
+    // Apply rotation to the basketball mesh
+    basketball.rotation.x = ballRotation.x;
+    basketball.rotation.z = ballRotation.z;
+    
+    // Also apply to the entire basketball group for visibility
+    basketballGroup.rotation.x = ballRotation.x;
+    basketballGroup.rotation.z = ballRotation.z;
+    
+    console.log(`Moving ${direction}: speed=${moveSpeed.toFixed(4)}, rotation=${rotationAmount.toFixed(4)}`);
+  }
+}
+
+function adjustShotPower(increase) {
+  if (isInFlight) return; // Can't adjust power while ball is in flight
+  
+  if (increase) {
+    shotPower = Math.min(100, shotPower + 2);
+  } else {
+    shotPower = Math.max(0, shotPower - 2);
+  }
+  updateGameUI();
+}
+
+function showShotFeedback(made, customMessage = null) {
+  const feedback = document.createElement('div');
+  feedback.style.cssText = `
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: ${made ? 'rgba(76, 175, 80, 0.9)' : 'rgba(244, 67, 54, 0.9)'};
+    color: white;
+    padding: 20px 40px;
+    border-radius: 10px;
+    font-size: 24px;
+    font-weight: bold;
+    z-index: 2000;
+    pointer-events: none;
+  `;
+  feedback.textContent = customMessage || (made ? 'SHOT MADE!' : 'MISSED SHOT');
+  document.body.appendChild(feedback);
+  
+  setTimeout(() => {
+    document.body.removeChild(feedback);
+  }, 2000);
+}
+
+function updateGameUI() {
+  // Update accuracy
+  gameStats.accuracy = gameStats.shotAttempts > 0 ?
+    Math.round((gameStats.shotsMade / gameStats.shotAttempts) * 100) : 0;
+    
+  // Update both team scores
+  document.getElementById('home-score').textContent = gameStats.homeScore;
+  document.getElementById('away-score').textContent = gameStats.awayScore;
+  
+  // Update power indicator in controls
+  const powerDisplay = document.getElementById('power-display');
+  if (powerDisplay) {
+    powerDisplay.textContent = shotPower + '%';
+    powerDisplay.style.color = shotPower > 70 ? '#ff4444' : shotPower > 40 ? '#ffaa00' : '#44ff44';
+  }
+  
+  // Update stats
+  const shotAttemptsEl = document.getElementById('shot-attempts');
+  const shotsMadeEl = document.getElementById('shots-made');
+  const accuracyEl = document.getElementById('accuracy');
+  
+  if (shotAttemptsEl) shotAttemptsEl.textContent = gameStats.shotAttempts;
+  if (shotsMadeEl) shotsMadeEl.textContent = gameStats.shotsMade;
+  if (accuracyEl) accuracyEl.textContent = gameStats.accuracy + '%';
+}
 
 const centerLineGeometry = new THREE.BoxGeometry(0.1, 0.02, 15);
 const centerLineMaterial = new THREE.MeshPhongMaterial({ color: lineColor });
@@ -431,10 +756,15 @@ controlsContainer.style.cssText = `
 controlsContainer.innerHTML = `
   <h3 style="margin: 0 0 10px 0; font-size: 16px; color: #ff6600;">CONTROLS</h3>
   <div style="font-size: 14px; line-height: 1.4;">
+    <div><strong>Arrow Keys</strong> - Move basketball</div>
+    <div><strong>W/S</strong> - Adjust shot power</div>
+    <div><strong>Spacebar</strong> - Shoot basketball</div>
+    <div><strong>R</strong> - Reset ball position</div>
     <div><strong>O</strong> - Toggle orbit camera</div>
-    <div><strong>Mouse</strong> - Rotate view (when orbit enabled)</div>
-    <div><strong>Scroll</strong> - Zoom in/out</div>
     <div style="margin-top: 8px; font-size: 12px; color: #ccc;">
+      Shot Power: <span id="power-display" style="font-weight: bold;">50%</span>
+    </div>
+    <div style="font-size: 12px; color: #ccc;">
       Camera: <span id="camera-status">Enabled</span>
     </div>
   </div>
@@ -456,13 +786,13 @@ statsContainer.style.cssText = `
   pointer-events: auto;
 `;
 statsContainer.innerHTML = `
-  <h3 style="margin: 0 0 10px 0; font-size: 16px; color: #ff6600;">GAME STATS</h3>
+  <h3 style="margin: 0 0 10px 0; font-size: 16px; color: #ff6600;">SHOOTING STATS</h3>
   <div style="font-size: 13px; line-height: 1.6;">
-    <div>Quarter: <span id="quarter">1st</span></div>
-    <div>Fouls: H:<span id="home-fouls">0</span> | A:<span id="away-fouls">0</span></div>
-    <div>Timeouts: H:<span id="home-timeouts">3</span> | A:<span id="away-timeouts">3</span></div>
+    <div>Shot Attempts: <span id="shot-attempts">0</span></div>
+    <div>Shots Made: <span id="shots-made">0</span></div>
+    <div>Accuracy: <span id="accuracy">0%</span></div>
     <div style="margin-top: 8px; font-size: 11px; color: #ccc;">
-      Status: <span id="game-status">Ready</span>
+      Status: <span id="game-status">Ready to Shoot</span>
     </div>
   </div>
 `;
@@ -491,20 +821,75 @@ function updateCameraStatus() {
 // Initialize camera status
 updateCameraStatus();
 
+// Input handling variables
+let keysPressed = {};
+
 // Handle key events
 function handleKeyDown(e) {
-  if (e.key === "o" || e.key === "O") {
-    isOrbitEnabled = !isOrbitEnabled;
-    updateCameraStatus(); // Updates UI display
-
+  keysPressed[e.key.toLowerCase()] = true;
+  
+  // Handle single-press actions
+  switch(e.key.toLowerCase()) {
+    case 'o':
+      isOrbitEnabled = !isOrbitEnabled;
+      updateCameraStatus();
+      break;
+    case ' ': // Spacebar
+      e.preventDefault(); // Prevent page scrolling
+      shootBasketball();
+      break;
+    case 'r':
+      resetBasketball();
+      break;
   }
 }
 
-document.addEventListener('keydown', handleKeyDown);
+function handleKeyUp(e) {
+  keysPressed[e.key.toLowerCase()] = false;
+}
 
-// Animation function
-function animate() {
+document.addEventListener('keydown', handleKeyDown);
+document.addEventListener('keyup', handleKeyUp);
+
+// Handle continuous key presses
+function handleContinuousInput() {
+  // Movement controls (arrow keys)
+  if (keysPressed['arrowleft']) {
+    moveBasketball('left');
+  }
+  if (keysPressed['arrowright']) {
+    moveBasketball('right');
+  }
+  if (keysPressed['arrowup']) {
+    moveBasketball('forward');
+  }
+  if (keysPressed['arrowdown']) {
+    moveBasketball('backward');
+  }
+  
+  // Shot power adjustment
+  if (keysPressed['w']) {
+    adjustShotPower(true);
+  }
+  if (keysPressed['s']) {
+    adjustShotPower(false);
+  }
+}
+
+// Animation function with delta time for physics
+let lastTime = 0;
+function animate(currentTime) {
   requestAnimationFrame(animate);
+  
+  // Calculate delta time
+  const deltaTime = (currentTime - lastTime) / 1000; // Convert to seconds
+  lastTime = currentTime;
+  
+  // Handle continuous input
+  handleContinuousInput();
+  
+  // Update basketball physics
+  updateBasketballPhysics(deltaTime);
   
   // Update controls
   controls.enabled = isOrbitEnabled;
@@ -514,3 +899,6 @@ function animate() {
 }
 
 animate();
+
+// Initialize the game UI
+updateGameUI();
