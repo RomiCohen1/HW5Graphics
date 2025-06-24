@@ -1,5 +1,628 @@
 import {OrbitControls} from './OrbitControls.js'
+class SimpleSoundManager {
+  constructor() {
+    this.audioContext = null;
+    this.sounds = {};
+    this.enabled = true;
+    this.volume = 0.7;
+    this.initialized = false;
+    
+    this.initializeAudio();
+    this.createSounds();
+  }
 
+  async initializeAudio() {
+    try {
+      this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      
+      // Create master volume control
+      this.masterGain = this.audioContext.createGain();
+      this.masterGain.connect(this.audioContext.destination);
+      this.masterGain.gain.value = this.volume;
+      
+      console.log('Simple audio system initialized');
+      this.initialized = true;
+    } catch (error) {
+      console.warn('Audio initialization failed:', error);
+      this.enabled = false;
+    }
+  }
+
+  async resumeAudioContext() {
+    if (this.audioContext && this.audioContext.state === 'suspended') {
+      await this.audioContext.resume();
+    }
+  }
+
+  createSounds() {
+    this.createBounceSound();
+    this.createShootSound();
+    this.createScoreSound();
+  }
+
+  // Basketball bounce sound
+  createBounceSound() {
+    this.sounds.bounce = () => {
+      if (!this.enabled || !this.audioContext) return;
+      
+      const oscillator = this.audioContext.createOscillator();
+      const gainNode = this.audioContext.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(this.masterGain);
+      
+      // Deep thump sound for basketball bounce
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(120, this.audioContext.currentTime);
+      oscillator.frequency.exponentialRampToValueAtTime(60, this.audioContext.currentTime + 0.15);
+      
+      gainNode.gain.setValueAtTime(0.4, this.audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 0.2);
+      
+      oscillator.start(this.audioContext.currentTime);
+      oscillator.stop(this.audioContext.currentTime + 0.2);
+    };
+  }
+
+  // Basketball shooting sound
+  createShootSound() {
+    this.sounds.shoot = () => {
+      if (!this.enabled || !this.audioContext) return;
+      
+      const oscillator = this.audioContext.createOscillator();
+      const gainNode = this.audioContext.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(this.masterGain);
+      
+      // Quick whoosh sound for shooting
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(400, this.audioContext.currentTime);
+      oscillator.frequency.linearRampToValueAtTime(800, this.audioContext.currentTime + 0.1);
+      
+      gainNode.gain.setValueAtTime(0.2, this.audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 0.1);
+      
+      oscillator.start(this.audioContext.currentTime);
+      oscillator.stop(this.audioContext.currentTime + 0.1);
+    };
+  }
+
+  // Score celebration sound
+  createScoreSound() {
+    this.sounds.score = () => {
+      if (!this.enabled || !this.audioContext) return;
+      
+      // Create a simple celebratory chord progression
+      const frequencies = [523.25, 659.25, 783.99]; // C5, E5, G5
+      
+      frequencies.forEach((freq, index) => {
+        setTimeout(() => {
+          const oscillator = this.audioContext.createOscillator();
+          const gainNode = this.audioContext.createGain();
+          
+          oscillator.connect(gainNode);
+          gainNode.connect(this.masterGain);
+          
+          oscillator.type = 'sine';
+          oscillator.frequency.value = freq;
+          
+          gainNode.gain.setValueAtTime(0.3, this.audioContext.currentTime);
+          gainNode.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 0.4);
+          
+          oscillator.start(this.audioContext.currentTime);
+          oscillator.stop(this.audioContext.currentTime + 0.4);
+        }, index * 80);
+      });
+    };
+  }
+
+  // Play a specific sound
+  playSound(soundName) {
+    if (!this.enabled || !this.sounds[soundName]) return;
+    
+    this.resumeAudioContext();
+    this.sounds[soundName]();
+  }
+
+  // Toggle sound on/off
+  toggleSound() {
+    this.enabled = !this.enabled;
+    console.log(`Sound ${this.enabled ? 'enabled' : 'disabled'}`);
+    return this.enabled;
+  }
+
+  // Set volume (0.0 to 1.0)
+  setVolume(volume) {
+    this.volume = Math.max(0, Math.min(1, volume));
+    if (this.masterGain) {
+      this.masterGain.gain.value = this.volume;
+    }
+  }
+
+  isEnabled() {
+    return this.enabled;
+  }
+}
+// FIXED TIME CHALLENGE SYSTEM - NON-INTRUSIVE UI
+// Replace your existing TimeChallenge class with this improved version
+
+class TimeChallenge {
+  constructor() {
+    this.isActive = false;
+    this.timeRemaining = 0;
+    this.totalTime = 0;
+    this.timer = null;
+    this.challengeType = 'none';
+    this.startTime = 0;
+    this.challenges = {
+      sprint: { name: "Sprint Shoot", time: 30, target: 5, description: "Score 5 baskets in 30 seconds" },
+      marathon: { name: "Marathon", time: 120, target: 15, description: "Score 15 baskets in 2 minutes" },
+      lightning: { name: "Lightning Round", time: 15, target: 3, description: "Score 3 baskets in 15 seconds" },
+      endurance: { name: "Endurance Test", time: 180, target: 25, description: "Score 25 baskets in 3 minutes" }
+    };
+    this.challengeStats = {
+      shotsAttempted: 0,
+      shotsMade: 0,
+      startingScore: 0,
+      targetReached: false,
+      bestTime: null
+    };
+    
+    this.createChallengeUI();
+  }
+
+  createChallengeUI() {
+    // MAIN CHALLENGE MENU (only shown when selecting challenges)
+    const challengeContainer = document.createElement('div');
+    challengeContainer.id = 'challenge-container';
+    challengeContainer.style.cssText = `
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 30px;
+      border-radius: 15px;
+      text-align: center;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+      z-index: 3000;
+      min-width: 400px;
+      display: none;
+      font-family: Arial, sans-serif;
+    `;
+    
+    challengeContainer.innerHTML = `
+      <h2 style="margin: 0 0 20px 0; color: #fff; font-size: 28px;">🏀 TIME CHALLENGE</h2>
+      <div id="challenge-menu">
+        <p style="margin-bottom: 20px; font-size: 16px;">Choose your challenge:</p>
+        <div id="challenge-buttons" style="margin-bottom: 20px;">
+          ${Object.keys(this.challenges).map(key => `
+            <button class="challenge-btn" data-challenge="${key}" style="
+              display: block;
+              width: 100%;
+              margin: 8px 0;
+              padding: 12px;
+              background: rgba(255,255,255,0.2);
+              border: 2px solid rgba(255,255,255,0.3);
+              color: white;
+              border-radius: 8px;
+              cursor: pointer;
+              font-size: 14px;
+              transition: all 0.3s ease;
+            ">
+              <strong>${this.challenges[key].name}</strong><br>
+              <small>${this.challenges[key].description}</small>
+            </button>
+          `).join('')}
+        </div>
+        <button id="close-challenge" style="
+          padding: 10px 20px;
+          background: rgba(255,255,255,0.2);
+          border: 1px solid rgba(255,255,255,0.3);
+          color: white;
+          border-radius: 5px;
+          cursor: pointer;
+        ">Close</button>
+      </div>
+      
+      <div id="challenge-complete" style="display: none;">
+        <h3 id="completion-title" style="margin: 0 0 15px 0;"></h3>
+        <div id="completion-message" style="font-size: 18px; margin: 15px 0;"></div>
+        <div id="challenge-stats" style="margin: 20px 0; font-size: 14px;"></div>
+        <button id="new-challenge" style="
+          margin: 10px 5px;
+          padding: 10px 20px;
+          background: #4CAF50;
+          border: none;
+          color: white;
+          border-radius: 5px;
+          cursor: pointer;
+        ">New Challenge</button>
+        <button id="back-to-game" style="
+          margin: 10px 5px;
+          padding: 10px 20px;
+          background: #2196F3;
+          border: none;
+          color: white;
+          border-radius: 5px;
+          cursor: pointer;
+        ">Back to Game</button>
+      </div>
+    `;
+    
+    document.body.appendChild(challengeContainer);
+    
+    // COMPACT CHALLENGE HUD (shown during gameplay - non-intrusive)
+    this.createCompactHUD();
+    this.setupEventListeners();
+    this.addChallengeButton();
+  }
+
+  createCompactHUD() {
+    // Create a compact HUD that doesn't block the game view
+    const compactHUD = document.createElement('div');
+    compactHUD.id = 'challenge-hud';
+    compactHUD.style.cssText = `
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      background: linear-gradient(135deg, rgba(102, 126, 234, 0.95) 0%, rgba(118, 75, 162, 0.95) 100%);
+      color: white;
+      padding: 15px 20px;
+      border-radius: 12px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      font-family: Arial, sans-serif;
+      z-index: 2000;
+      display: none;
+      min-width: 200px;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 8px 25px rgba(0,0,0,0.2);
+    `;
+    
+    compactHUD.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <div style="font-size: 12px; font-weight: bold; color: #FFE082;" id="hud-challenge-name">CHALLENGE</div>
+        <button id="quit-challenge-hud" style="
+          background: rgba(255,255,255,0.2);
+          border: 1px solid rgba(255,255,255,0.3);
+          color: white;
+          border-radius: 4px;
+          padding: 2px 8px;
+          cursor: pointer;
+          font-size: 10px;
+        ">QUIT</button>
+      </div>
+      
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+        <div style="font-size: 28px; font-weight: bold;" id="hud-timer">1:00</div>
+        <div style="text-align: right; font-size: 14px;">
+          <div id="hud-progress" style="font-weight: bold;">0/5</div>
+          <div style="font-size: 10px; color: #E0E0E0;">PROGRESS</div>
+        </div>
+      </div>
+      
+      <div style="background: rgba(255,255,255,0.2); height: 6px; border-radius: 3px; overflow: hidden; margin-bottom: 8px;">
+        <div id="hud-progress-bar" style="
+          height: 100%;
+          background: linear-gradient(90deg, #4CAF50 0%, #45a049 100%);
+          width: 0%;
+          transition: width 0.3s ease;
+          border-radius: 3px;
+        "></div>
+      </div>
+      
+      <div style="display: flex; justify-content: space-between; font-size: 11px; color: #E0E0E0;">
+        <span>Attempts: <span id="hud-attempts">0</span></span>
+        <span>Accuracy: <span id="hud-accuracy">0%</span></span>
+      </div>
+    `;
+    
+    document.body.appendChild(compactHUD);
+  }
+
+  addChallengeButton() {
+    // Add to existing controls container
+    const controlsContainer = document.getElementById('controls-container');
+    if (controlsContainer) {
+      const challengeButton = document.createElement('div');
+      challengeButton.style.cssText = `
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px solid #555;
+      `;
+      challengeButton.innerHTML = `
+        <button id="start-challenge-btn" style="
+          width: 100%;
+          padding: 8px;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          color: white;
+          border: none;
+          border-radius: 5px;
+          cursor: pointer;
+          font-weight: bold;
+          font-size: 14px;
+        ">🏀 TIME CHALLENGE</button>
+        <div style="font-size: 10px; color: #ccc; margin-top: 3px; text-align: center;">
+          Press 'T' for challenges
+        </div>
+      `;
+      
+      controlsContainer.appendChild(challengeButton);
+      
+      document.getElementById('start-challenge-btn').addEventListener('click', () => {
+        this.showChallengeMenu();
+      });
+    }
+  }
+
+  setupEventListeners() {
+    // Challenge selection buttons
+    document.querySelectorAll('.challenge-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const challengeType = btn.dataset.challenge;
+        this.startChallenge(challengeType);
+      });
+      
+      // Hover effects
+      btn.addEventListener('mouseenter', () => {
+        btn.style.background = 'rgba(255,255,255,0.3)';
+        btn.style.transform = 'scale(1.02)';
+      });
+      
+      btn.addEventListener('mouseleave', () => {
+        btn.style.background = 'rgba(255,255,255,0.2)';
+        btn.style.transform = 'scale(1)';
+      });
+    });
+    
+    // Close button
+    document.getElementById('close-challenge').addEventListener('click', () => {
+      this.hideChallengeMenu();
+    });
+    
+    // Quit challenge buttons (both main and HUD)
+    document.getElementById('quit-challenge-hud').addEventListener('click', () => {
+      this.endChallenge(false);
+    });
+    
+    // New challenge button
+    document.getElementById('new-challenge').addEventListener('click', () => {
+      this.showChallengeMenu();
+    });
+    
+    // Back to game button
+    document.getElementById('back-to-game').addEventListener('click', () => {
+      this.hideChallengeMenu();
+    });
+    
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+      if (e.key.toLowerCase() === 't' && !this.isActive) {
+        this.showChallengeMenu();
+      }
+      if (e.key === 'Escape') {
+        if (document.getElementById('challenge-container').style.display !== 'none') {
+          this.hideChallengeMenu();
+        } else if (this.isActive) {
+          this.endChallenge(false); // Quit active challenge with Escape
+        }
+      }
+    });
+  }
+
+  showChallengeMenu() {
+    const container = document.getElementById('challenge-container');
+    container.style.display = 'block';
+    
+    // Show menu, hide completion section
+    document.getElementById('challenge-menu').style.display = 'block';
+    document.getElementById('challenge-complete').style.display = 'none';
+  }
+
+  hideChallengeMenu() {
+    document.getElementById('challenge-container').style.display = 'none';
+  }
+
+  startChallenge(challengeType) {
+    if (this.isActive) return;
+    
+    this.isActive = true;
+    this.challengeType = challengeType;
+    this.timeRemaining = this.challenges[challengeType].time;
+    this.totalTime = this.challenges[challengeType].time;
+    this.startTime = Date.now();
+    
+    // Reset stats
+    this.challengeStats = {
+      shotsAttempted: gameStats.shotAttempts, // Store starting attempts
+      shotsMade: 0,
+      startingScore: gameStats.shotsMade,
+      targetReached: false,
+      bestTime: null
+    };
+    
+    // Hide the challenge menu
+    this.hideChallengeMenu();
+    
+    // Show the compact HUD instead
+    document.getElementById('challenge-hud').style.display = 'block';
+    document.getElementById('hud-challenge-name').textContent = this.challenges[challengeType].name.toUpperCase();
+    document.getElementById('hud-progress').textContent = `0/${this.challenges[challengeType].target}`;
+    
+    // Start countdown
+    this.startTimer();
+    
+    // Play sound if available
+    if (window.soundManager) {
+      soundManager.playSound('shoot');
+    }
+    
+    console.log(`Started ${challengeType} challenge: ${this.challenges[challengeType].description}`);
+  }
+
+  startTimer() {
+    this.timer = setInterval(() => {
+      this.timeRemaining--;
+      this.updateHUDDisplay();
+      
+      if (this.timeRemaining <= 0) {
+        this.endChallenge(false); // Time up
+      }
+      
+      // Check if target reached
+      const currentMade = gameStats.shotsMade - this.challengeStats.startingScore;
+      if (currentMade >= this.challenges[this.challengeType].target) {
+        this.endChallenge(true); // Success
+      }
+      
+    }, 1000);
+  }
+
+  updateHUDDisplay() {
+    const minutes = Math.floor(this.timeRemaining / 60);
+    const seconds = this.timeRemaining % 60;
+    const timeString = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    
+    // Update timer
+    document.getElementById('hud-timer').textContent = timeString;
+    
+    // Update progress
+    const currentMade = gameStats.shotsMade - this.challengeStats.startingScore;
+    const target = this.challenges[this.challengeType].target;
+    const progress = (currentMade / target) * 100;
+    
+    document.getElementById('hud-progress').textContent = `${currentMade}/${target}`;
+    document.getElementById('hud-progress-bar').style.width = Math.min(progress, 100) + '%';
+    
+    // Update stats
+    const totalAttempts = gameStats.shotAttempts - this.challengeStats.shotsAttempted;
+    const accuracy = totalAttempts > 0 ? Math.round((currentMade / totalAttempts) * 100) : 0;
+    document.getElementById('hud-accuracy').textContent = accuracy + '%';
+    document.getElementById('hud-attempts').textContent = totalAttempts;
+    
+    // Change timer color when time is running out
+    const timerEl = document.getElementById('hud-timer');
+    if (this.timeRemaining <= 10) {
+      timerEl.style.color = '#ff4444';
+      timerEl.style.animation = 'pulse 1s infinite';
+      // Flash the entire HUD
+      document.getElementById('challenge-hud').style.borderColor = '#ff4444';
+    } else if (this.timeRemaining <= 30) {
+      timerEl.style.color = '#ffaa00';
+      document.getElementById('challenge-hud').style.borderColor = '#ffaa00';
+    } else {
+      timerEl.style.color = 'white';
+      timerEl.style.animation = 'none';
+      document.getElementById('challenge-hud').style.borderColor = 'rgba(255, 255, 255, 0.3)';
+    }
+  }
+
+  endChallenge(success) {
+    if (!this.isActive) return;
+    
+    this.isActive = false;
+    clearInterval(this.timer);
+    
+    // Hide HUD
+    document.getElementById('challenge-hud').style.display = 'none';
+    
+    // Calculate final stats
+    const currentMade = gameStats.shotsMade - this.challengeStats.startingScore;
+    const totalAttempts = gameStats.shotAttempts - this.challengeStats.shotsAttempted;
+    const finalAccuracy = totalAttempts > 0 ? Math.round((currentMade / totalAttempts) * 100) : 0;
+    const timeUsed = this.totalTime - this.timeRemaining;
+    
+    // Show completion screen
+    document.getElementById('challenge-container').style.display = 'block';
+    document.getElementById('challenge-menu').style.display = 'none';
+    document.getElementById('challenge-complete').style.display = 'block';
+    
+    if (success) {
+      document.getElementById('completion-title').textContent = '🎉 CHALLENGE COMPLETED!';
+      document.getElementById('completion-title').style.color = '#4CAF50';
+      document.getElementById('completion-message').textContent = `Congratulations! You scored ${currentMade} baskets in ${this.formatTime(timeUsed)}!`;
+      
+      // Play success sound
+      if (window.soundManager) {
+        soundManager.playSound('score');
+      }
+    } else {
+      document.getElementById('completion-title').textContent = '⏰ TIME UP!';
+      document.getElementById('completion-title').style.color = '#ff4444';
+      document.getElementById('completion-message').textContent = `Challenge failed. You scored ${currentMade} out of ${this.challenges[this.challengeType].target} baskets.`;
+    }
+    
+    // Show detailed stats
+    document.getElementById('challenge-stats').innerHTML = `
+      <div style="text-align: left; display: inline-block;">
+        <div><strong>Challenge:</strong> ${this.challenges[this.challengeType].name}</div>
+        <div><strong>Target:</strong> ${this.challenges[this.challengeType].target} baskets</div>
+        <div><strong>Scored:</strong> ${currentMade} baskets</div>
+        <div><strong>Attempts:</strong> ${totalAttempts}</div>
+        <div><strong>Accuracy:</strong> ${finalAccuracy}%</div>
+        <div><strong>Time Used:</strong> ${this.formatTime(timeUsed)} / ${this.formatTime(this.totalTime)}</div>
+        ${success ? `<div style="color: #4CAF50;"><strong>Result:</strong> SUCCESS! 🏆</div>` : `<div style="color: #ff4444;"><strong>Result:</strong> Failed ❌</div>`}
+      </div>
+    `;
+    
+    console.log(`Challenge ended: ${success ? 'SUCCESS' : 'FAILED'}`);
+  }
+
+  formatTime(seconds) {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  }
+
+  onScore() {
+    if (this.isActive) {
+      this.updateHUDDisplay();
+    }
+  }
+
+  onShotAttempt() {
+    if (this.isActive) {
+      this.updateHUDDisplay();
+    }
+  }
+
+  isInChallenge() {
+    return this.isActive;
+  }
+
+  getCurrentChallenge() {
+    return this.isActive ? this.challenges[this.challengeType] : null;
+  }
+}
+
+// Re-initialize with the fixed version
+if (window.timeChallenge) {
+  // Clean up old instance
+  const oldHUD = document.getElementById('challenge-hud');
+  if (oldHUD) oldHUD.remove();
+  
+  const oldContainer = document.getElementById('challenge-container');
+  if (oldContainer) oldContainer.remove();
+}
+
+// Create new improved instance
+window.timeChallenge = new TimeChallenge();
+
+// CSS for animations
+const style = document.createElement('style');
+style.textContent = `
+  @keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+  }
+`;
+document.head.appendChild(style);
+
+// Initialize the simple sound manager
+const soundManager = new SimpleSoundManager();
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 
@@ -270,12 +893,26 @@ function updateBasketballPhysics(deltaTime) {
     ballVelocity.y = -ballVelocity.y * bounceCoefficient;
     ballVelocity.x *= 0.8; // Friction
     ballVelocity.z *= 0.8; // Friction
+    soundManager.playSound('bounce');
     
     // Stop bouncing if velocity is too low
     if (Math.abs(ballVelocity.y) < 0.5 && speed < 1) {
       isInFlight = false;
       ballVelocity.set(0, 0, 0);
     }
+  }
+  
+  // Check for backboard collisions
+  checkBackboardCollision();
+  
+  // Check if ball is out of court bounds
+  if (basketballGroup.position.x < -16 || basketballGroup.position.x > 16 ||
+      basketballGroup.position.z < -9 || basketballGroup.position.z > 9) {
+    // Ball is out of bounds - reset to center court
+    setTimeout(() => {
+      resetBasketball();
+    }, 1000);
+    return; // Don't check for score if ball is out of bounds
   }
   
   // Check for score
@@ -323,7 +960,8 @@ function checkForScore() {
         ballVelocity.y < 0 && // Ball must be moving downward
         isInFlight) { // Only count during flight, not manual movement
       
-      console.log(`SCORE DETECTED! Ball passed through ${hoop.team} hoop!`);
+      soundManager.playSound('score');
+      timeChallenge.onScore();
       
       // Score for the appropriate team!
       gameStats.shotsMade++;
@@ -345,9 +983,12 @@ function checkForScore() {
       
       updateGameUI();
       
-      // Stop the ball
+      // Stop the ball and reset to center court after a short delay
       isInFlight = false;
       ballVelocity.set(0, 0, 0);
+      setTimeout(() => {
+        resetBasketball();
+      }, 2000); // Reset after 2 seconds
     }
   });
   
@@ -355,9 +996,69 @@ function checkForScore() {
   previousBallPosition.copy(ballPos);
 }
 
+function checkBackboardCollision() {
+  const ballPos = basketballGroup.position;
+  const ballRadius = 0.24;
+  
+  // Backboard dimensions and positions
+  const backboards = [
+    {
+      x: 14.5 + 0.28, // Right backboard (hoop at 14.5 + 0.1, backboard at +0.28 from hoop)
+      minY: 3.05 - 0.525, // Bottom of backboard (hoop height - half backboard height)
+      maxY: 3.05 + 0.525, // Top of backboard
+      minZ: -0.9, // Half backboard width
+      maxZ: 0.9,  // Half backboard width
+      thickness: 0.05
+    },
+    {
+      x: -14.5 - 0.28, // Left backboard (hoop at -14.5 - 0.1, backboard at -0.28 from hoop)
+      minY: 3.05 - 0.525,
+      maxY: 3.05 + 0.525,
+      minZ: -0.9,
+      maxZ: 0.9,
+      thickness: 0.05
+    }
+  ];
+  
+  backboards.forEach(board => {
+    // Check if ball is within backboard Y and Z bounds
+    if (ballPos.y >= board.minY - ballRadius && ballPos.y <= board.maxY + ballRadius &&
+        ballPos.z >= board.minZ - ballRadius && ballPos.z <= board.maxZ + ballRadius) {
+      
+      // Check collision with right backboard (positive X)
+      if (board.x > 0) {
+        // Ball hits from the left side (court side)
+        if (ballPos.x + ballRadius >= board.x - board.thickness/2 &&
+            ballPos.x < board.x &&
+            ballVelocity.x > 0) {
+          // Collision detected - bounce ball back
+          ballPos.x = board.x - board.thickness/2 - ballRadius;
+          ballVelocity.x = -ballVelocity.x * 0.8; // Reverse X velocity with some energy loss
+          ballVelocity.y *= 0.9; // Slight energy loss in Y
+          ballVelocity.z *= 0.9; // Slight energy loss in Z
+        }
+      }
+      // Check collision with left backboard (negative X)
+      else {
+        // Ball hits from the right side (court side)
+        if (ballPos.x - ballRadius <= board.x + board.thickness/2 &&
+            ballPos.x > board.x &&
+            ballVelocity.x < 0) {
+          // Collision detected - bounce ball back
+          ballPos.x = board.x + board.thickness/2 + ballRadius;
+          ballVelocity.x = -ballVelocity.x * 0.8; // Reverse X velocity with some energy loss
+          ballVelocity.y *= 0.9; // Slight energy loss in Y
+          ballVelocity.z *= 0.9; // Slight energy loss in Z
+        }
+      }
+    }
+  });
+}
+
 function shootBasketball() {
   if (isInFlight) return; // Can't shoot while ball is in flight
-  
+  soundManager.playSound('shoot');
+  timeChallenge.onShotAttempt();
   gameStats.shotAttempts++;
   
   // Find nearest hoop
@@ -385,16 +1086,31 @@ function shootBasketball() {
   
   // Calculate shot trajectory
   const targetHeight = 3.05; // Hoop height
-  const currentHeight = basketballGroup.position.y;
+  const currentHeight = 0.44; // Ball is always at this height when shooting (ballRadius + 0.2)
   const distance = minDistance;
   
-  // Calculate initial velocity based on shot power
+  // Calculate initial velocity based on shot power and distance
   const powerMultiplier = shotPower / 100;
-  const baseVelocity = 15; // Base shooting velocity
-  const initialVelocity = baseVelocity * powerMultiplier;
   
-  // Calculate trajectory angle for proper arc
-  const angle = Math.atan2(targetHeight - currentHeight + 2, distance); // +2 for arc
+  // Use consistent shooting angle that provides good arc regardless of distance
+  const shootingAngle = Math.PI / 4; // 45 degrees - optimal for most distances
+  
+  // Calculate required velocity to reach the target at this angle
+  const heightDiff = targetHeight - currentHeight;
+  const gravity = 9.8;
+  
+  // Physics formula: v = sqrt(g * d^2 / (2 * cos^2(θ) * (d * tan(θ) - h)))
+  const cosAngle = Math.cos(shootingAngle);
+  const tanAngle = Math.tan(shootingAngle);
+  
+  const velocitySquared = (gravity * distance * distance) /
+    (2 * cosAngle * cosAngle * (distance * tanAngle - heightDiff));
+  
+  const requiredVelocity = Math.sqrt(Math.abs(velocitySquared));
+  
+  // Apply power multiplier to the required velocity
+  const initialVelocity = requiredVelocity * powerMultiplier;
+  const angle = shootingAngle;
   
   // Set velocity components
   const direction = new THREE.Vector3(
@@ -761,6 +1477,7 @@ controlsContainer.innerHTML = `
     <div><strong>Spacebar</strong> - Shoot basketball</div>
     <div><strong>R</strong> - Reset ball position</div>
     <div><strong>O</strong> - Toggle orbit camera</div>
+    <div><strong>T</strong> - Time challenge</div>
     <div style="margin-top: 8px; font-size: 12px; color: #ccc;">
       Shot Power: <span id="power-display" style="font-weight: bold;">50%</span>
     </div>
@@ -840,6 +1557,11 @@ function handleKeyDown(e) {
       break;
     case 'r':
       resetBasketball();
+      break;
+    case 't':
+      if (!timeChallenge.isInChallenge()) {
+        timeChallenge.showChallengeMenu();
+      }
       break;
   }
 }
