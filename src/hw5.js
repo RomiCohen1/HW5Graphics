@@ -93,8 +93,7 @@ class SimpleSoundManager {
     this.sounds.score = () => {
       if (!this.enabled || !this.audioContext) return;
       
-      // Create a simple celebratory chord progression
-      const frequencies = [523.25, 659.25, 783.99]; // C5, E5, G5
+      const frequencies = [523.25, 659.25, 783.99];
       
       frequencies.forEach((freq, index) => {
         setTimeout(() => {
@@ -120,32 +119,10 @@ class SimpleSoundManager {
   // Play a specific sound
   playSound(soundName) {
     if (!this.enabled || !this.sounds[soundName]) return;
-    
     this.resumeAudioContext();
     this.sounds[soundName]();
   }
-
-  // Toggle sound on/off
-  toggleSound() {
-    this.enabled = !this.enabled;
-    console.log(`Sound ${this.enabled ? 'enabled' : 'disabled'}`);
-    return this.enabled;
-  }
-
-  // Set volume (0.0 to 1.0)
-  setVolume(volume) {
-    this.volume = Math.max(0, Math.min(1, volume));
-    if (this.masterGain) {
-      this.masterGain.gain.value = this.volume;
-    }
-  }
-
-  isEnabled() {
-    return this.enabled;
-  }
 }
-// FIXED TIME CHALLENGE SYSTEM - NON-INTRUSIVE UI
-// Replace your existing TimeChallenge class with this improved version
 
 class TimeChallenge {
   constructor() {
@@ -173,7 +150,7 @@ class TimeChallenge {
   }
 
   createChallengeUI() {
-    // MAIN CHALLENGE MENU (only shown when selecting challenges)
+    // MAIN CHALLENGE MENU 
     const challengeContainer = document.createElement('div');
     challengeContainer.id = 'challenge-container';
     challengeContainer.style.cssText = `
@@ -257,7 +234,6 @@ class TimeChallenge {
     // COMPACT CHALLENGE HUD (shown during gameplay - non-intrusive)
     this.createCompactHUD();
     this.setupEventListeners();
-    this.addChallengeButton();
   }
 
   createCompactHUD() {
@@ -320,41 +296,6 @@ class TimeChallenge {
     `;
     
     document.body.appendChild(compactHUD);
-  }
-
-  addChallengeButton() {
-    // Add to existing controls container
-    const controlsContainer = document.getElementById('controls-container');
-    if (controlsContainer) {
-      const challengeButton = document.createElement('div');
-      challengeButton.style.cssText = `
-        margin-top: 10px;
-        padding-top: 10px;
-        border-top: 1px solid #555;
-      `;
-      challengeButton.innerHTML = `
-        <button id="start-challenge-btn" style="
-          width: 100%;
-          padding: 8px;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          color: white;
-          border: none;
-          border-radius: 5px;
-          cursor: pointer;
-          font-weight: bold;
-          font-size: 14px;
-        ">🏀 TIME CHALLENGE</button>
-        <div style="font-size: 10px; color: #ccc; margin-top: 3px; text-align: center;">
-          Press 'T' for challenges
-        </div>
-      `;
-      
-      controlsContainer.appendChild(challengeButton);
-      
-      document.getElementById('start-challenge-btn').addEventListener('click', () => {
-        this.showChallengeMenu();
-      });
-    }
   }
 
   setupEventListeners() {
@@ -457,9 +398,7 @@ class TimeChallenge {
     // Play sound if available
     if (window.soundManager) {
       soundManager.playSound('shoot');
-    }
-    
-    console.log(`Started ${challengeType} challenge: ${this.challenges[challengeType].description}`);
+    };
   }
 
   startTimer() {
@@ -476,7 +415,6 @@ class TimeChallenge {
       if (currentMade >= this.challenges[this.challengeType].target) {
         this.endChallenge(true); // Success
       }
-      
     }, 1000);
   }
 
@@ -566,8 +504,6 @@ class TimeChallenge {
         ${success ? `<div style="color: #4CAF50;"><strong>Result:</strong> SUCCESS! 🏆</div>` : `<div style="color: #ff4444;"><strong>Result:</strong> Failed ❌</div>`}
       </div>
     `;
-    
-    console.log(`Challenge ended: ${success ? 'SUCCESS' : 'FAILED'}`);
   }
 
   formatTime(seconds) {
@@ -1086,16 +1022,14 @@ function shootBasketball() {
   
   // Calculate shot trajectory
   const targetHeight = 3.05; // Hoop height
-  const currentHeight = 0.44; // Ball is always at this height when shooting (ballRadius + 0.2)
+  const currentHeight = 0.44; 
   const distance = minDistance;
   
-  // Calculate initial velocity based on shot power and distance
+  // Calculate initial velocity 
   const powerMultiplier = shotPower / 100;
+  const shootingAngle = Math.PI / 4; // 45 degrees 
   
-  // Use consistent shooting angle that provides good arc regardless of distance
-  const shootingAngle = Math.PI / 4; // 45 degrees - optimal for most distances
-  
-  // Calculate required velocity to reach the target at this angle
+  // Calculate required velocity to reach the target
   const heightDiff = targetHeight - currentHeight;
   const gravity = 9.8;
   
@@ -1140,8 +1074,8 @@ function resetBasketball() {
   ballVelocity.set(0, 0, 0);
   ballRotation.set(0, 0, 0);
   basketball.rotation.set(0, 0, 0);
-  basketballGroup.rotation.set(0, 0, 0); // Also reset group rotation
-  previousBallPosition.set(0, ballRadius + 0.2, 0); // Reset previous position tracking
+  basketballGroup.rotation.set(0, 0, 0);
+  previousBallPosition.set(0, ballRadius + 0.2, 0);
   ballAboveHoop = false;
   isInFlight = false;
   shotPower = 50;
@@ -1152,7 +1086,7 @@ function resetBasketball() {
 function moveBasketball(direction, speed = 5) {
   if (isInFlight) return; // Can't move while ball is in flight
   
-  const moveSpeed = speed * 0.016; // Assuming 60 FPS
+  const moveSpeed = speed * 0.016; 
   const newPosition = basketballGroup.position.clone();
   
   switch(direction) {
@@ -1176,12 +1110,10 @@ function moveBasketball(direction, speed = 5) {
   
   basketballGroup.position.copy(newPosition);
   
-  // Add rotation during movement - PROPORTIONAL TO VELOCITY
+  // Add rotation during movement 
   if (!isInFlight) {
-    // Calculate rotation based on movement speed (velocity-proportional)
-    const rotationMultiplier = 15; // How much rotation per unit of movement
+    const rotationMultiplier = 15;
     const rotationAmount = moveSpeed * rotationMultiplier;
-    
     if (direction === 'left' || direction === 'right') {
       ballRotation.z += (direction === 'left' ? rotationAmount : -rotationAmount);
     } else {
@@ -1192,11 +1124,9 @@ function moveBasketball(direction, speed = 5) {
     basketball.rotation.x = ballRotation.x;
     basketball.rotation.z = ballRotation.z;
     
-    // Also apply to the entire basketball group for visibility
+    // apply to the entire basketball group for visibility
     basketballGroup.rotation.x = ballRotation.x;
     basketballGroup.rotation.z = ballRotation.z;
-    
-    console.log(`Moving ${direction}: speed=${moveSpeed.toFixed(4)}, rotation=${rotationAmount.toFixed(4)}`);
   }
 }
 
