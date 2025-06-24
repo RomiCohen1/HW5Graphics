@@ -60,4 +60,8 @@ This project builds upon HW06 by implementing a fully interactive basketball sho
 - Sound effects for shots, bounces, and scores
 - Timed challenges
 
-  
+ ## Demo: 
+
+
+https://github.com/user-attachments/assets/970ac841-e038-4111-990e-31f9a724dd35
+
