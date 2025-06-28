@@ -56,6 +56,18 @@ This project builds upon HW06 by implementing a fully interactive basketball sho
 - **Physics State Management**: Proper handling of flight vs. ground states
 - **Responsive Controls**: Smooth, real-time input handling
 
+## Physics System
+
+The game features a realistic physics engine built with Three.js:
+
+- **Ball Movement**: Gravity-based physics with realistic bouncing and rotation
+- **Shooting**: Calculates trajectory using physics formulas with adjustable power (0-100%)
+- **Collisions**: Ground bouncing, backboard rebounds, and precise hoop detection
+- **Scoring**: Only counts shots that pass through the hoop from above while moving downward
+- **Boundaries**: Keeps ball within court limits with automatic reset when out of bounds
+
+The physics system runs at consistent speeds across different devices using delta time calculations.
+
 ## Bonus
 - Sound effects for shots, bounces, and scores
 - Timed challenges
